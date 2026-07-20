@@ -1,0 +1,56 @@
+name: AutoBlogger Content Automation
+
+on:
+  schedule:
+    # Run every 4 hours (at minute 0)
+    - cron: '0 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run in dry-run mode (no publishing)'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  run-autoblogger:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute AutoBlogger Pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          BLOGGER_BLOG_ID: ${{ secrets.BLOGGER_BLOG_ID }}
+          BLOGGER_CLIENT_ID: ${{ secrets.BLOGGER_CLIENT_ID }}
+          BLOGGER_CLIENT_SECRET: ${{ secrets.BLOGGER_CLIENT_SECRET }}
+          BLOGGER_REFRESH_TOKEN: ${{ secrets.BLOGGER_REFRESH_TOKEN }}
+          RSS_FEEDS: ${{ secrets.RSS_FEEDS }}
+          MAX_ARTICLES_PER_RUN: 1
+        run: |
+          EXTRA_FLAGS=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            EXTRA_FLAGS="--dry-run"
+          fi
+          python main.py $EXTRA_FLAGS
+
+      - name: Commit & Push Processed State
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "auto: update processed_articles.json state tracker [skip ci]"
+          file_pattern: 'processed_articles.json'
